@@ -6,19 +6,16 @@ import {
 } from "../../service/jobPost.service";
 import {
   applyForJob,
+  getMyApplications,
   type ApplyForJobPayload,
+  type JobApplication,
 } from "../../service/jobApplication.service";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import {
   Briefcase,
-  LayoutDashboard,
-  ClipboardList,
-  Bookmark,
   User,
   FileText,
-  Settings,
-  LogOut,
   Bell,
   X,
   Upload,
@@ -265,103 +262,36 @@ const ApplyModal = ({ job, onClose, onSuccess }: ApplyModalProps) => {
 
 /* ─── Main Page ─────────────────────────────────── */
 const JobSeekerDashboardPage = () => {
-  const [jobs, setJobs] = useState<JobPost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { logout, user } = useAuth();
+  const [applications, setApplications] = useState<JobApplication[]>([]);
+  const [loadingApps, setLoadingApps] = useState(true);
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  const [appliedIds, setAppliedIds] = useState<Set<string>>(
-    () => new Set(JSON.parse(localStorage.getItem("appliedJobIds") || "[]"))
-  );
   const [selectedJobForApply, setSelectedJobForApply] = useState<JobPost | null>(null);
 
-  const isJobsPage = location.pathname === "/jobs";
 
-  const fetchJobs = useCallback(async () => {
-    setLoading(true);
+  const fetchApplications = useCallback(async () => {
+    setLoadingApps(true);
     try {
-      const params: GetJobsParams = { page: 1, limit: 50 };
-      const data = await getPublicJobPosts(params);
-      const list: JobPost[] = Array.isArray(data) ? data : data.data ?? data.jobs ?? [];
-      setJobs(list);
+      const data = await getMyApplications();
+      const list = Array.isArray(data) ? data : data.data ?? [];
+      setApplications(list);
     } catch { /* silent */ }
-    finally { setLoading(false); }
+    finally { setLoadingApps(false); }
   }, []);
 
-  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+  useEffect(() => { fetchApplications(); }, [fetchApplications]);
 
   const userName = (user as any)?.name || (user as any)?.fullName || "User";
   const firstName = userName.split(" ")[0];
   const userInitial = firstName.charAt(0).toUpperCase();
-  const appliedJobs = jobs.filter((j) => appliedIds.has(j.id));
 
-  /* ── Sidebar nav config ── */
-  const NAV_ITEMS = [
-    { icon: LayoutDashboard, label: "Dashboard",       path: "/dashboard",              exact: true },
-    { icon: ClipboardList,   label: "My Applications", path: "/dashboard/applications", exact: false },
-    { icon: Bookmark,        label: "Saved Jobs",      path: "/dashboard/saved",        exact: false },
-    { icon: User,            label: "Profile",         path: "/dashboard/profile",      exact: false },
-    { icon: FileText,        label: "Resume",          path: "/dashboard/resume",       exact: false },
-    { icon: Settings,        label: "Settings",        path: "/dashboard/settings",     exact: false },
-  ];
 
-  const isNavActive = (path: string, exact?: boolean) =>
-    exact ? location.pathname === path : location.pathname.startsWith(path);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f5f6fa] font-sans text-slate-900">
 
-      {/* ══ SIDEBAR ══ */}
-      <aside className="flex w-52 shrink-0 flex-col border-r border-slate-200 bg-white px-3 py-5">
-        {/* Logo */}
-        <div className="mb-7 flex items-center gap-2.5 px-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
-            <Briefcase className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-sm font-bold tracking-tight text-slate-900">JobPortal</span>
-        </div>
-
-        {/* Nav links */}
-        <nav className="flex flex-col gap-0.5">
-          {NAV_ITEMS.map(({ icon: Icon, label, path, exact }) => {
-            const active = isNavActive(path, exact);
-            return (
-              <button key={path} onClick={() => navigate(path)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-                  active
-                    ? "bg-indigo-50 font-semibold text-indigo-700"
-                    : "font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                }`}>
-                <Icon className={`h-4 w-4 shrink-0 ${active ? "text-indigo-600" : "text-slate-400"}`} />
-                {label}
-              </button>
-            );
-          })}
-
-          {/* Job Postings → /jobs page */}
-          <button
-            onClick={() => navigate("/jobs")}
-            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-              isJobsPage
-                ? "bg-indigo-50 font-semibold text-indigo-700"
-                : "font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-            }`}>
-            <ClipboardList className={`h-4 w-4 shrink-0 ${isJobsPage ? "text-indigo-600" : "text-slate-400"}`} />
-            Job Postings
-          </button>
-        </nav>
-
-        {/* Logout */}
-        <div className="mt-auto border-t border-slate-100 pt-4">
-          <button
-            onClick={async () => { try { await logout(); } finally { navigate("/login"); } }}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-red-50 hover:text-red-500">
-            <LogOut className="h-4 w-4" />
-            Logout
-          </button>
-        </div>
-      </aside>
+   
 
       {/* ══ MAIN ══ */}
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -389,10 +319,10 @@ const JobSeekerDashboardPage = () => {
           {/* ── Stats row ── */}
           <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[
-              { icon: Briefcase, label: "Applications", value: appliedIds.size, bg: "bg-indigo-50",  iconColor: "text-indigo-500",  border: "border-indigo-100" },
-              { icon: Calendar,  label: "Interviews",   value: 0,               bg: "bg-teal-50",    iconColor: "text-teal-500",    border: "border-teal-100" },
-              { icon: Heart,     label: "Shortlisted",  value: 0,               bg: "bg-emerald-50", iconColor: "text-emerald-500", border: "border-emerald-100" },
-              { icon: Gift,      label: "Offers",       value: 0,               bg: "bg-violet-50",  iconColor: "text-violet-500",  border: "border-violet-100" },
+              { icon: Briefcase, label: "Applications", value: applications.length, bg: "bg-indigo-50",  iconColor: "text-indigo-500",  border: "border-indigo-100" },
+              { icon: Calendar,  label: "Pending",   value: applications.filter(a => a.status === "Pending").length, bg: "bg-teal-50",    iconColor: "text-teal-500",    border: "border-teal-100" },
+              { icon: Heart,     label: "Shortlisted",  value: applications.filter(a => a.status === "Shortlisted").length, bg: "bg-emerald-50", iconColor: "text-emerald-500", border: "border-emerald-100" },
+              { icon: Gift,      label: "Offers",       value: applications.filter(a => a.status === "Hired").length, bg: "bg-violet-50",  iconColor: "text-violet-500",  border: "border-violet-100" },
             ].map(({ icon: Icon, label, value, bg, iconColor, border }) => (
               <div key={label} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${bg} ${border}`}>
@@ -421,7 +351,7 @@ const JobSeekerDashboardPage = () => {
                   </button>
                 </div>
 
-                {loading ? (
+                {loadingApps ? (
                   <div className="space-y-px p-4">
                     {Array.from({ length: 4 }).map((_, i) => (
                       <div key={i} className="flex animate-pulse items-center gap-4 rounded-xl p-3">
@@ -434,7 +364,7 @@ const JobSeekerDashboardPage = () => {
                       </div>
                     ))}
                   </div>
-                ) : appliedJobs.length === 0 ? (
+                ) : applications.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-14 text-center">
                     <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
                       <Briefcase className="h-5 w-5 text-slate-300" />
@@ -448,18 +378,20 @@ const JobSeekerDashboardPage = () => {
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-50">
-                    {appliedJobs.slice(0, 6).map((job) => {
-                      const color = getColor(job.companyName);
-                      const statusCfg = STATUS_CONFIG["Applied"];
+                    {applications.slice(0, 6).map((app) => {
+                      const jobTitle = app.job?.title || "Unknown Job";
+                      const companyName = app.job?.companyName || "Unknown Company";
+                      const color = getColor(companyName);
+                      const statusCfg = STATUS_CONFIG[app.status] || STATUS_CONFIG["Applied"];
                       return (
-                        <div key={job.id}
+                        <div key={app.id}
                           className="flex items-center gap-4 px-6 py-3.5 transition-colors hover:bg-slate-50">
                           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-bold ${color.bg} ${color.border} ${color.text}`}>
-                            {getInitials(job.title) || "J"}
+                            {getInitials(jobTitle) || "J"}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-slate-900">{job.title}</p>
-                            <p className="truncate text-xs text-slate-400">{job.companyName}</p>
+                            <p className="truncate text-sm font-semibold text-slate-900">{jobTitle}</p>
+                            <p className="truncate text-xs text-slate-400">{companyName}</p>
                           </div>
                           <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${statusCfg.className}`}>
                             {statusCfg.label}
@@ -522,6 +454,7 @@ const JobSeekerDashboardPage = () => {
           job={selectedJobForApply}
           onClose={() => setSelectedJobForApply(null)}
           onSuccess={(jobId) => {
+            fetchApplications();
             setAppliedIds((prev) => {
               const updated = new Set(prev);
               updated.add(jobId);

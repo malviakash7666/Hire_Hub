@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Briefcase, Search, Plus, MapPin, Filter, Pencil, Loader2, Users,
   X, Clock3, ClipboardList, UserCheck,
-  Bell, ChevronDown, Trash2, AlertTriangle, Star, FileText, ChevronRight, Calendar
+  Bell, ChevronDown, Trash2, AlertTriangle, Star, FileText, ChevronRight,
+  ChevronLeft, Calendar,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import {
@@ -16,7 +17,6 @@ import {
   getAllApplications, type JobApplication,
 } from "../../service/jobApplication.service"; // ← import your real service
 import { useNavigate } from "react-router-dom";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 /* ─── TYPES ─── */
 type ModalMode = "create" | "edit";
@@ -132,12 +132,15 @@ const DeleteConfirmModal: React.FC<{ job: JobPost; onConfirm: () => void; onCanc
 );
 
 /* ─── MAIN PAGE ─── */
-const JobPostDashboardPage: React.FC = () => {
+const MyJobsPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isAdmin = (user as any)?.role === "admin";
 
   const [jobs, setJobs] = useState<JobPost[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | JobStatus>("All");
@@ -152,8 +155,7 @@ const JobPostDashboardPage: React.FC = () => {
   const [jobFormError, setJobFormError] = useState<string | null>(null);
   const [applicantsLoadingRowId, setApplicantsLoadingRowId] = useState<string | null>(null);
 
-  // ── Dynamic applicants (replaces MOCK_APPLICANTS) ──
-  const [allApplications, setAllApplications] = useState<JobApplication[]>([]);
+
 
   // ── CSV Bulk Import States & Handlers ──
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -226,25 +228,36 @@ const JobPostDashboardPage: React.FC = () => {
   const loadJobs = async () => {
     try {
       setLoading(true);
-      const res = isAdmin ? await getAllJobPosts() : await getMyJobPosts();
-      setJobs(Array.isArray(res?.data) ? res.data : []);
-    } catch (err) { setJobs([]); } finally { setLoading(false); }
-  };
-
-  const loadTopApplicants = async () => {
-    try {
-      const res = await getAllApplications();
-      const data: JobApplication[] = Array.isArray(res?.data) ? res.data : [];
-      setAllApplications(data);
+      const params = {
+        page,
+        limit,
+        search: search || undefined,
+        status: statusFilter !== "All" ? statusFilter : undefined,
+      };
+      const res = isAdmin ? await getAllJobPosts(params) : await getMyJobPosts(params);
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setJobs(list);
+      setTotal(res?.total ?? list.length);
     } catch (err) {
-      setAllApplications([]);
+      setJobs([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
     }
   };
 
+
+
   useEffect(() => {
     loadJobs();
-    loadTopApplicants();
-  }, []);
+  }, [page, limit, search, statusFilter]);
+
+
+
+  // Reset page when search or filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
 
   /* ── Derived stats ── */
   const stats = useMemo(() => ({
@@ -254,45 +267,7 @@ const JobPostDashboardPage: React.FC = () => {
     total: jobs.length,
   }), [jobs]);
 
-  /* ── Dynamic Chart Data ── */
-  const applicationTrends = useMemo(() => {
-    const days = 7;
-    const data: { name: string; dateStr: string; applications: number }[] = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      data.push({
-        name: d.toLocaleDateString("en-US", { weekday: 'short' }),
-        dateStr: d.toDateString(),
-        applications: 0
-      });
-    }
-
-    allApplications.forEach(app => {
-      if (!app.createdAt) return;
-      const appDate = new Date(app.createdAt);
-      appDate.setHours(0, 0, 0, 0);
-      const match = data.find(d => d.dateStr === appDate.toDateString());
-      if (match) match.applications++;
-    });
-
-    return data;
-  }, [allApplications]);
-
-  const jobStatusData = useMemo(() => [
-    { name: "Active", value: stats.active, color: "#3b82f6" },
-    { name: "Paused", value: stats.shortlisted, color: "#8b5cf6" },
-    { name: "Closed", value: stats.hired, color: "#10b981" }
-  ].filter(d => d.value > 0), [stats]);
-
-  const filteredJobs = useMemo(() => jobs.filter(j => {
-    const q = search.trim().toLowerCase();
-    const matchesSearch = !q || [j.title, j.companyName, j.location, j.jobType, j.experienceLevel].filter(Boolean).some(v => v!.toLowerCase().includes(q));
-    return matchesSearch && (statusFilter === "All" || j.status === statusFilter);
-  }), [jobs, search, statusFilter]);
 
   /* ── Handlers ── */
   const handleDeleteConfirm = async () => {
@@ -353,13 +328,6 @@ const JobPostDashboardPage: React.FC = () => {
   const displayName  = (user as any)?.companyName || (user as any)?.name || "";
   const userInitial  = displayName.charAt(0).toUpperCase() || "?";
 
-  /* ── Stat card config (values are dynamic) ── */
-  const statCards = [
-    { icon: Briefcase, iconBg: "bg-blue-100",   iconColor: "text-blue-500",   value: stats.active,      label: "Active Jobs" },
-    { icon: Star,      iconBg: "bg-violet-100", iconColor: "text-violet-500", value: stats.shortlisted, label: "Paused"      },
-    { icon: UserCheck, iconBg: "bg-teal-100",   iconColor: "text-teal-500",   value: stats.hired,       label: "Closed"      },
-  ];
-
 
 
 
@@ -385,13 +353,13 @@ const JobPostDashboardPage: React.FC = () => {
           {/* Centre scroll area */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-7 py-6">
 
-            {/* Welcome */}
+            {/* Header & Controls */}
             <div className="mb-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <h1 className="text-xl sm:text-2xl font-black text-gray-900">
-                  {displayName ? `Welcome back, ${displayName}! 👋` : "Welcome back! 👋"}
+                  My Jobs
                 </h1>
-                <p className="mt-0.5 text-sm text-gray-400">Here's what's happening with your jobs.</p>
+                <p className="mt-0.5 text-sm text-gray-400">Manage and view all your posted roles.</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -413,105 +381,12 @@ const JobPostDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Stat Cards */}
-            <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-3">
-              {statCards.map((card, i) => (
-                <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 * (i + 1), duration: 0.3 }} className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white px-5 py-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5">
-                  <div className="flex items-center gap-4">
-                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform group-hover:scale-110 group-hover:rotate-3 ${card.iconBg}`}><card.icon className={`h-6 w-6 ${card.iconColor}`} /></div>
-                    <div>
-                      <p className="text-3xl font-black tracking-tight text-gray-900">{card.value}</p>
-                      <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-gray-500">{card.label}</p>
-                    </div>
-                  </div>
-                  <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-[0.03] transition-transform group-hover:scale-150 ${card.iconBg}`} />
-                </motion.div>
-              ))}
-            </div>
-
-            {/* Analytics Section */}
-            <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-black text-gray-900">Application Trends</h3>
-                    <p className="text-xs text-gray-500">Applications received over the last 7 days</p>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-1.5 text-xs font-bold text-gray-600">
-                    <Calendar className="h-3.5 w-3.5 text-gray-400" /> Last 7 Days
-                  </div>
-                </div>
-                <div className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={applicationTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorApps" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#9ca3af" }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#9ca3af" }} />
-                      <RechartsTooltip
-                        contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)" }}
-                        itemStyle={{ color: "#1f2937", fontWeight: 700 }}
-                      />
-                      <Area type="monotone" dataKey="applications" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorApps)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </motion.div>
-
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm flex flex-col">
-                <div className="mb-4">
-                  <h3 className="text-base font-black text-gray-900">Job Status</h3>
-                  <p className="text-xs text-gray-500">Distribution of your roles</p>
-                </div>
-                <div className="flex-1 flex flex-col items-center justify-center relative">
-                  {jobStatusData.length > 0 ? (
-                    <>
-                      <div className="h-[180px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={jobStatusData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
-                              {jobStatusData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                            </Pie>
-                            <RechartsTooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-4">
-                        <span className="text-2xl font-black text-gray-900">{stats.total}</span>
-                        <span className="text-[10px] font-bold uppercase text-gray-400 tracking-widest">Total</span>
-                      </div>
-                      <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
-                        {jobStatusData.map(entry => (
-                          <div key={entry.name} className="flex items-center gap-1.5">
-                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                            <span className="text-xs font-semibold text-gray-600">{entry.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2 text-gray-400">
-                      <Briefcase className="h-8 w-8 opacity-20" />
-                      <span className="text-xs font-medium">No jobs posted yet</span>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            </div>
-
             {/* Recent Jobs */}
             <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 px-5 py-3.5 gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 px-6 py-4 gap-4 bg-gray-50/50">
                 <div>
-                  <p className="text-sm font-black text-gray-900">Recent Jobs</p>
-                  <p className="text-xs text-gray-400">{filteredJobs.length} role{filteredJobs.length !== 1 ? "s" : ""}</p>
+                  <p className="text-base font-black text-gray-900">All Jobs</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Showing {jobs.length} of {total} roles</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="relative">
@@ -531,46 +406,82 @@ const JobPostDashboardPage: React.FC = () => {
               </div>
 
               {loading ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-14"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /><p className="text-sm font-semibold text-gray-400">Loading jobs…</p></div>
-              ) : filteredJobs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-14">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-400"><Briefcase className="h-5 w-5" /></div>
+                <div className="flex flex-col items-center justify-center gap-3 py-20"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /><p className="text-sm font-semibold text-gray-400">Loading jobs…</p></div>
+              ) : jobs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-20">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-400"><Briefcase className="h-6 w-6" /></div>
                   <p className="text-sm font-bold text-gray-700">No roles found</p>
                   <p className="text-xs text-gray-400">Try adjusting filters, or <button onClick={openCreateModal} className="font-semibold text-blue-600 underline underline-offset-2">post a new role</button>.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-50">
-                  {filteredJobs.map((job, idx) => (
-                    <motion.div key={job.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-blue-50/30">
-                      <JobTypeIcon type={job.jobType} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-gray-900">{job.title}</p>
-                        <p className="text-[11px] text-gray-400">Posted {timeAgo(job.createdAt)}</p>
+                  {jobs.map((job, idx) => (
+                    <motion.div key={job.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }} className="group flex flex-col sm:flex-row sm:items-center gap-4 px-6 py-4 transition-all hover:bg-blue-50/20">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <JobTypeIcon type={job.jobType} />
+                        <div className="min-w-0">
+                          <p className="truncate text-[15px] font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{job.title}</p>
+                          <div className="mt-1 flex items-center gap-3 text-xs text-gray-500 font-medium">
+                            <span className="flex items-center gap-1"><MapPin className="h-3 w-3 text-gray-400" /> {job.location || "Remote"}</span>
+                            <span className="flex items-center gap-1"><Calendar className="h-3 w-3 text-gray-400" /> {timeAgo(job.createdAt)}</span>
+                          </div>
+                        </div>
                       </div>
-                      <span className={`hidden items-center gap-1 rounded-full px-3 py-1 text-xs font-bold sm:inline-flex ${getStatusClasses(job.status)}`}>
-                        <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
-                        {job.status === "Open" ? "Active" : job.status}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleOpenApplicantsPage(job)} title="View applicants" className="flex h-7 items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2 text-[11px] font-bold text-blue-600 transition hover:bg-blue-100">
-                          {applicantsLoadingRowId === job.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Users className="h-3 w-3" />}
-                          <span className="hidden lg:inline">View</span>
-                        </button>
-                        <button onClick={() => openEditModal(job)} title="Edit" className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-600"><Pencil className="h-3 w-3" /></button>
-                        <button onClick={() => setDeleteModalJob(job)} title="Delete" className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
+                      
+                      <div className="flex items-center gap-4 sm:gap-6 ml-13 sm:ml-0">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${getStatusClasses(job.status)}`}>
+                          <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+                          {job.status === "Open" ? "Active" : job.status}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleOpenApplicantsPage(job)} className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+                            {applicantsLoadingRowId === job.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+                            <span>Applicants</span>
+                          </button>
+                          <button onClick={() => openEditModal(job)} title="Edit" className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-600"><Pencil className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => setDeleteModalJob(job)} title="Delete" className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                        </div>
                       </div>
                     </motion.div>
                   ))}
                 </div>
               )}
 
-              {filteredJobs.length > 0 && (
-                <div className="flex items-center justify-center border-t border-gray-100 bg-gray-50/50 py-4">
-                  <button onClick={() => navigate("/dashboard/my-jobs")} className="group flex items-center gap-1.5 text-sm font-bold text-blue-600 transition hover:text-blue-700">
-                    View All Manageable Jobs <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </button>
+              {/* Pagination Controls */}
+              {total > limit && (
+                <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/50 px-6 py-4">
+                  <p className="text-xs font-medium text-gray-500">
+                    Showing <span className="font-bold text-gray-900">{(page - 1) * limit + 1}</span> to <span className="font-bold text-gray-900">{Math.min(page * limit, total)}</span> of <span className="font-bold text-gray-900">{total}</span> roles
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    {Array.from({ length: Math.ceil(total / limit) }).map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setPage(i + 1)}
+                        className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition-colors ${page === i + 1 ? "bg-blue-600 text-white" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setPage(p => Math.min(Math.ceil(total / limit), p + 1))}
+                      disabled={page >= Math.ceil(total / limit)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               )}
+
+
             </div>
           </div>
 
@@ -804,4 +715,4 @@ const JobPostDashboardPage: React.FC = () => {
   );
 };
 
-export default JobPostDashboardPage;
+export default MyJobsPage;

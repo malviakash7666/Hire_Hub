@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 
-import Navbar from "../../components/Navbar";
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -189,8 +189,7 @@ const HomePage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans overflow-x-hidden">
 
-      {/* ── Header ── */}
-   <Navbar />
+
 
       {/* ── Hero ── */}
       <section className="bg-white px-10 pt-16 pb-20">

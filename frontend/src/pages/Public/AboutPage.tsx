@@ -170,42 +170,7 @@ const AboutPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
 
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-50 bg-white border-b border-gray-200 px-10">
-        <div className="max-w-7xl mx-auto flex items-center justify-between h-[68px] gap-4">
-          <Link to="/" className="flex items-center gap-2.5 shrink-0">
-            <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center shadow">
-              <Briefcase className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-lg font-extrabold text-gray-900 tracking-tight">HireHub</span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-8">
-            {[
-              { label: "Find Jobs", to: "/" },
-              { label: "Companies", to: "/" },
-              { label: "Categories", to: "/categories" },
-              { label: "About Us", to: "/about" },
-              { label: "Pricing", to: "/pricing" },
-            ].map((item) => (
-              <Link
-                key={item.label}
-                to={item.to}
-                className={`text-sm font-medium transition-colors ${
-                  item.label === "About Us"
-                    ? "text-blue-600 font-semibold"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="hidden sm:inline-flex px-5 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:border-blue-500 hover:text-blue-600 transition-colors">Login</Link>
-            <Link to="/signup" className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">Sign Up</Link>
-          </div>
-        </div>
-      </header>
+
 
       {/* ── Hero ── */}
       <section className="bg-white px-10 pt-14 pb-20 border-b border-gray-100">
